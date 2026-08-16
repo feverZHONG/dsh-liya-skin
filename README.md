@@ -1,0 +1,80 @@
+# dsh-liya-skin-plugin · 莉娅 DSH 皮肤插件
+
+本地自建 DSH WebUI 皮肤插件，两块功能：
+1. **壁纸**：以图片为主、无预设。`wallpapers/` 目录放图即用（缩略图选择、动态切换），
+   图片透明度滑条（只作用于图片本身），半透明层颜色自动跟随当前皮肤（皮肤/壁纸正交）。
+2. **莉娅星月皮肤层（v0.3.0）**：自绘星月 SVG 装饰——顶部星带 + 底部星轨 + 标题栏弯月徽标「莉娅」，
+   与壁纸正交叠加，跟随侧栏宽度与对话状态响应式移动，卸载即完整还原。
+
+> **v0.4.1（2026-08-17）修复「皮肤层开关配置不生效」实锤坑**：`settingsScope.bind()` 每次调用都新建
+> controller（初始 `status='loading'`、load 异步），旧代码 `readSkinConfig` 每次读取都 bind → 永远读不到
+> `ready` → 开关怎么改都不生效（壁纸不受影响，host 持久化一直是好的）。修法：apply 期 bind 一次、复用
+> 同一 controller 传入 `readSkinConfig`。改完刷新 WebUI 页面即生效（client bundle no-cache 实时读文件）。
+>
+> 皮肤说明：曾内置 Catppuccin 主题（Mocha/Latte），2026-08-15 起移除，只用 DSH 原生浅/深皮肤。
+
+## 功能
+
+| 功能 | 说明 |
+|:-----|:-----|
+| 壁纸图片 | `wallpapers/` 目录（png/jpg/webp/gif/svg），缩略图网格点选即动态切换 |
+| 图片透明度 | 滑条 0-100（默认 100），置顶，**只作用于壁纸图片本身**（`body::before` opacity） |
+| 刷新按钮 | 🔃 重拉 `/liya-wallpaper/list`，放新图不用重启 WebUI |
+| 状态持久化 | 图片选择 + 透明度由 **host 记住**（`$DSH_HOME/liya-wallpaper-state.json`），换浏览器/重启都恢复 |
+| 星月装饰 | 顶部星带（`liya-top-trim`）+ 底部星轨（`liya-bottom-trim`）+ 标题栏弯月徽标「莉娅」，自绘 SVG 无版权负担 |
+| 状态投影 | `body[data-liya-chat-active]`（对话中，底部星轨退下）/ `body[data-liya-settings-open]`，CSS 响应 |
+| 卸载还原 | effect 销毁器删除作用域属性、还原 style、移除装饰 DOM 与注入 CSS，外来节点一律不碰 |
+| 插件配置卡 | 设置 → 插件 → 插件配置 →「dsh-liya-skin-plugin」卡：皮肤层总开关 + 星带/星轨/徽标各自开关，保存即时生效（settings host 持久化） |
+
+入口：设置 → 壁纸。
+
+## 原理
+
+### 壁纸（抄的官方 seam）
+
+- **注入**：host 半 `webServer.tapIndex()` 往 index.html 的 `<body>` 后注入 `<style>` + `<script>`（官方 ui-theme 的 bootTheme 同款做法）。壁纸图放 `body::before`（`--dsh-wallpaper` + `--dsh-wallpaper-opacity`），暗化层放 `body::after`（`--dsh-wallpaper-dim`），都 `z-index:-1` 垫底
+- **透出（皮肤/壁纸正交）**：壁纸开启时 client 半调 `theme.overrideTokens('liya-wallpaper', {...})` 给 `bg-base`/`bg-layer-1`/`bg-layer-2`/`sidebar-fill` 叠半透明层（固定 alpha 0.6）。**半透明色不写死**——运行时 `getComputedStyle` 读当前皮肤 token 值转 rgba，`theme/change`（换皮肤）时重算
+- **持久化（v0.2.0 起 host 权威）**：client 每次切换/调滑条 `POST /liya-wallpaper/state` 写 `$DSH_HOME/liya-wallpaper-state.json`（host 侧 sanitize：文件名 basename 防穿越、opacity 钳制 0-100）；启动时 client `GET` 恢复并覆盖本地。localStorage 降级为瞬时缓存/无 host 兜底
+
+### 莉娅星月皮肤层（抄 dsh-deep-whale/maid-atelier 架构，2026-08-16）
+
+- **作用域**：`body[data-dsh-liya-skin]`，全部 CSS 挂作用域下（注入 `<style data-plugin-css='dsh-liya-skin/starlight.css'>`），卸载即删
+- **装饰层**：`position:fixed` 星带/星轨，`translate: var(--liya-sidebar-width)` 跟随侧栏（ResizeObserver 写 CSSOM 规则，**不产生 attribute mutation** 避免观察死循环——抄作业的教训）；`pointer-events:none` + `aria-hidden` 完全不挡交互
+- **标题栏品牌**：`[class*='titlebar']` 存在才装饰（普通标签页无 titlebar 时安全跳过），幂等 + 懒装饰（MutationObserver 发现 titlebar 出现再补）
+- **状态投影**：`[data-phase='active'] [data-chat-flow]` → `data-liya-chat-active`（对话中底部星轨退下）；`[data-slot='sidebar.settings']` 展开 → `data-liya-settings-open`
+- **卸载还原**：effect 销毁器删除作用域/投影属性、还原 `--liya-*` style 变量、移除 ownedNodes（装饰 DOM + CSS 标签 + 宽度规则）、disconnect 全部 observer——外来 DOM 一律不动
+- **素材**：星/月/星轨 SVG 内嵌 client.js（data URI），与壁纸/皮肤色正交，明暗主题都可见
+- **配置（v0.4.0）**：host 半 `settings.register('liya-skin', Schema.object({skin/topTrim/bottomTrim/titlebarBrand}))`；
+  client 订阅 `settingsScope`，配置变更**重建皮肤层**（dispose 旧 → startLiyaSkin 重读配置）即时生效；总开关关闭时作用域/CSS/装饰全不注入（壁纸不受影响）
+
+## 安装 / 打包
+
+```powershell
+# 安装（workspace 目录下执行）
+node "<dsh>" plugin --profile web add <本插件目录>
+
+# 打包归档（产物在 workspace\dsh-plugins\dist\）
+pnpm pack --pack-destination <本插件目录>
+
+# 卸载
+node "...bin.js" plugin --profile web remove dsh-liya-skin-plugin
+```
+
+已安装后改源码**不用重装**（link 依赖，改完重启 WebUI 即可）。
+
+## 开发与验证
+
+```powershell
+# 语法 + 三处同步自检
+node <check-plugin.mjs> <本插件目录>
+
+# jsdom 真实 DOM 冒烟（作用域/装饰/品牌/投影/还原/壁纸共存 23 项）
+node <冒烟脚本>
+```
+
+## 已知边界
+
+- 半透明层只改 4 个背景 token（固定 alpha 0.6），某些深层面板可能不透——想更透就把对应 token 加进 `WALLPAPER_TOKENS`（颜色自动跟随皮肤）
+- 图片透明度滑条只作用于壁纸图片，不碰界面；暗化层固定保证文字可读
+- 图片服务 `/liya-wallpaper/file/<name>` 有 basename + startsWith 双重防路径穿越
+- 皮肤层装饰元素不遮挡交互（pointer-events none），但 z-index 20 层在少数全屏浮层下可能被盖住——不影响功能

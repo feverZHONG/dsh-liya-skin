@@ -1,0 +1,22 @@
+{
+  "id": "liya-skin",
+  "name": "莉娅星月",
+  "nameEn": "Liya Starlight",
+  "author": "fever钟",
+  "tagline": "星月装饰、标题栏品牌与莉娅风背景层",
+  "description": "一套轻量莉娅主题皮肤层：自绘星月 SVG 装饰（顶部星带 + 底部星轨 + 标题栏弯月徽标），与壁纸正交叠加，跟随侧栏宽度与对话状态响应式移动，卸载即完整还原。",
+  "tags": [
+    "starlight",
+    "moon",
+    "minimal",
+    "liya"
+  ],
+  "accent": "#c5a468",
+  "bodyAttr": "data-dsh-liya-skin",
+  "package": "dsh-liya-skin-plugin",
+  "wiring": {
+    "id": "dsh-liya-skin",
+    "bundleWired": true
+  },
+  "order": 10
+}

@@ -1,0 +1,5 @@
+# 莉娅 DSH 皮肤插件 —— 挂载条目
+# 被 dsh.profile.bundles 按加入顺序应用（在 @deepseek-ai/dsh-base 与 dsh-web-app 之后）
+- insert:
+    - id: dsh-liya-skin
+      name: dsh-liya-skin-plugin
