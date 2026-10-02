@@ -6,10 +6,10 @@
 2. **莉娅星月皮肤层（v0.3.0）**：自绘星月 SVG 装饰——顶部星带 + 底部星轨 + 标题栏弯月徽标「莉娅」，
    与壁纸正交叠加，跟随侧栏宽度与对话状态响应式移动，卸载即完整还原。
 
-> **v0.4.1（2026-08-17）修复「皮肤层开关配置不生效」实锤坑**：`settingsScope.bind()` 每次调用都新建
-> controller（初始 `status='loading'`、load 异步），旧代码 `readSkinConfig` 每次读取都 bind → 永远读不到
-> `ready` → 开关怎么改都不生效（壁纸不受影响，host 持久化一直是好的）。修法：apply 期 bind 一次、复用
-> 同一 controller 传入 `readSkinConfig`。改完刷新 WebUI 页面即生效（client bundle no-cache 实时读文件）。
+> **v0.5.0（2026-10-02）适配 DSH 0.2.0-rc.2**：rc.2 移除了客户端 `settingsScope` 服务与 host 的
+> `ctx.settings.register()`。配置改为「插件导出 `Config`（字段需 `.volatile()`）+ profile entry id 作
+> namespace」+ 客户端 `ctx.get('configForms')`，配置项由原生「设置 → 插件」页自动生成；旧的自定义
+> `settings.plugin.item` 卡随之退役。本版本起仅适配 rc.2 及以后。
 >
 > 皮肤说明：曾内置 Catppuccin 主题（Mocha/Latte），2026-08-15 起移除，只用 DSH 原生浅/深皮肤。
 
@@ -24,7 +24,7 @@
 | 星月装饰 | 顶部星带（`liya-top-trim`）+ 底部星轨（`liya-bottom-trim`）+ 标题栏弯月徽标「莉娅」，自绘 SVG 无版权负担 |
 | 状态投影 | `body[data-liya-chat-active]`（对话中，底部星轨退下）/ `body[data-liya-settings-open]`，CSS 响应 |
 | 卸载还原 | effect 销毁器删除作用域属性、还原 style、移除装饰 DOM 与注入 CSS，外来节点一律不碰 |
-| 插件配置卡 | 设置 → 插件 → 插件配置 →「dsh-liya-skin-plugin」卡：皮肤层总开关 + 星带/星轨/徽标各自开关，保存即时生效（settings host 持久化） |
+| 配置项 | 设置 → 插件 → 本插件：皮肤层总开关 + 星带/星轨/徽标各自开关，保存即时生效（host 持久化；0.2.0-rc.2 起由原生插件页按插件 `Config` 自动生成） |
 
 入口：设置 → 壁纸。
 
@@ -44,8 +44,8 @@
 - **状态投影**：`[data-phase='active'] [data-chat-flow]` → `data-liya-chat-active`（对话中底部星轨退下）；`[data-slot='sidebar.settings']` 展开 → `data-liya-settings-open`
 - **卸载还原**：effect 销毁器删除作用域/投影属性、还原 `--liya-*` style 变量、移除 ownedNodes（装饰 DOM + CSS 标签 + 宽度规则）、disconnect 全部 observer——外来 DOM 一律不动
 - **素材**：星/月/星轨 SVG 内嵌 client.js（data URI），与壁纸/皮肤色正交，明暗主题都可见
-- **配置（v0.4.0）**：host 半 `settings.register('liya-skin', Schema.object({skin/topTrim/bottomTrim/titlebarBrand}))`；
-  client 订阅 `settingsScope`，配置变更**重建皮肤层**（dispose 旧 → startLiyaSkin 重读配置）即时生效；总开关关闭时作用域/CSS/装饰全不注入（壁纸不受影响）
+- **配置（v0.5.0，rc.2 原生姿势）**：host 半 `export const Config = Schema.object({skin/topTrim/bottomTrim/titlebarBrand})`（各字段 `.volatile()`）；
+  client 半 `ctx.get('configForms').get('dsh-liya-skin')` 订阅，配置变更**重建皮肤层**（dispose 旧 → startLiyaSkin 重读配置）即时生效；总开关关闭时作用域/CSS/装饰全不注入（壁纸不受影响）
 
 ## 安装 / 打包
 

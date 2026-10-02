@@ -5,11 +5,11 @@
 //   3. 路由 /liya-wallpaper/file/<name> —— 按名返回图片文件（带路径穿越防护）
 //   4. 路由 /liya-wallpaper/state —— 壁纸状态持久化（GET 读 / POST 写 $DSH_HOME/liya-wallpaper-state.json），
 //      让壁纸选择像原生主题一样由 host 记住，换浏览器/重启都恢复（不依赖浏览器 localStorage）。
-//   5. 设置 namespace `liya-skin` 注册（settings 服务 + schemastery schema）——皮肤层开关持久化，
-//      client 半经 ctx.get('configForms') 读写（rc.2：配置页由官方插件页按 Config 自动生成）。
+//   5. 配置：导出 Config（schema 各字段 .volatile()），namespace = profile entry id `dsh-liya-skin`；
+//      client 半经 ctx.get('configForms') 读写（rc.2 起配置页由官方插件页按 Config 自动生成）。
 // 壁纸图源：本插件目录下的 wallpapers/（把自己的图丢进去即出现在设置里）。
-// schemastery：junction 链接自资源目录 node_modules（workspace/dsh-plugins/node_modules/@deepseek-ai/schemastery），
-// 解决 bundle 插件 link 目录向上解析不到依赖的问题（2026-08-16）。
+// 依赖：@deepseek-ai/schemastery（已写进 package.json dependencies；宿主若按 preserve-symlinks
+//   解析，profile 的 node_modules 里也需要装一份，否则插件 import 直接失败）。
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
