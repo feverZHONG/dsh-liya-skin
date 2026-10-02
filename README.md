@@ -50,27 +50,22 @@
 ## 安装 / 打包
 
 ```powershell
-# 安装（workspace 目录下执行）
-node "<dsh>" plugin --profile web add <本插件目录>
+# 安装（<dsh> 请替换为你安装的 DSH CLI 调用方式；装完重启才生效）
+<dsh> plugin --profile <profile> add <本插件目录>
 
-# 打包归档（产物在 workspace\dsh-plugins\dist\）
-pnpm pack --pack-destination <本插件目录>
+# 打包归档（npm 标准 tarball，可分发）
+pnpm pack --pack-destination <产物目录>
 
 # 卸载
-node "...bin.js" plugin --profile web remove dsh-liya-skin-plugin
+<dsh> plugin --profile <profile> remove dsh-liya-skin-plugin
 ```
 
-已安装后改源码**不用重装**（link 依赖，改完重启 WebUI 即可）。
+已安装后改源码**不用重装**（link 依赖，重启生效）。
 
-## 开发与验证
+> **壁纸素材自备**：仓库不含任何图片（`wallpapers/` 下的图不进版本库）。把自己的图
+> （png/jpg/webp/gif/svg）丢进 `wallpapers/`，再在设置 → 壁纸里点 🔃 即可出现；
+> 没有图时星月皮肤层照常工作。
 
-```powershell
-# 语法 + 三处同步自检
-node <check-plugin.mjs> <本插件目录>
-
-# jsdom 真实 DOM 冒烟（作用域/装饰/品牌/投影/还原/壁纸共存 23 项）
-node <冒烟脚本>
-```
 
 ## 已知边界
 

@@ -217,7 +217,18 @@ window.__ModuleLoader__.load({
       return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
     }
 
-    // 读皮肤层配置（settingsScope 可用时 host 持久化；否则默认全开）
+    // rc.2 设置接入：客户端服务由 settingsScope 改为 configForms（官方 ui-settings 的 client 半提供），
+    // namespace 用 profile entry id（插件 cordis.patch.yml 里的 id，本插件 = dsh-liya-skin）。
+    // ⚠️ 不写进 inject：万一服务缺席，条目只是拿不到配置，绝不让整个 web boot 卡在 pending（2026-10-02 实锤）。
+    function liyaConfigForm(ctx, entryId) {
+      try {
+        var cf = ctx.get('configForms');
+        if (cf === undefined || cf === null || typeof cf.get !== 'function') return null;
+        return cf.get(entryId);
+      } catch (e) { return null; }
+    }
+
+    // 读皮肤层配置（configForms 可用时 host 持久化；否则默认全开）
     // 教训（2026-08-17 实锤）：scope 必须 apply 期 bind 一次复用——bind() 每次调用都新建
     // controller（初始 status='loading'、load 异步），重复 bind 永远读不到 'ready'，配置永不生效。
     function readSkinConfig(bound) {
@@ -535,7 +546,7 @@ window.__ModuleLoader__.load({
     }
 
     // ── 插件配置卡（设置 → 插件 → 插件配置，id: dsh-liya-skin）
-    // 原生风格：可展开 + 可编辑配置（皮肤层开关）+ 保存/撤销，走 settingsScope（host 持久化，即时生效）。
+    // 原生风格：可展开 + 可编辑配置（皮肤层开关）+ 保存/撤销，走 configForms（host 持久化，即时生效）。
     // 视觉对齐官方 PluginCard：header 展开按钮 + dirty「未保存」标记 + body 字段 + footer 撤销/保存。
     var LIYA_SKIN_FIELDS = [
       { field: 'skin', label: '皮肤层总开关', hint: '关闭后星月装饰与作用域全部不注入（壁纸不受影响）' },
@@ -555,10 +566,7 @@ window.__ModuleLoader__.load({
       // 回退渲染期 bind（settings 服务缺失则卡退化为只读展示）
       var bound = props.bound !== undefined ? props.bound : null;
       if (bound === null) {
-        try {
-          var ss0 = ctx.get('settingsScope');
-          if (ss0 !== undefined) bound = ss0.bind({ namespace: 'liya-skin' });
-        } catch (e) { bound = null; }
+        bound = liyaConfigForm(ctx, 'dsh-liya-skin');
       }
 
       var openState = react.useState(false);
@@ -594,9 +602,9 @@ window.__ModuleLoader__.load({
       var writable = bound !== null && snap !== null && !!snap.writable;
       var value = (snap && snap.value && typeof snap.value === 'object') ? snap.value : {};
       var user = (snap && snap.user && typeof snap.user === 'object') ? snap.user : {};
-      // 诊断：为何配置不可用（settingsScope 服务/bind/status/订阅异常）
+      // 诊断：为何配置不可用（configForms 服务/控制器 status/订阅异常）
       var diag = {
-        hasSettingsScope: ctx.get('settingsScope') !== undefined,
+        hasConfigForms: ctx.get('configForms') !== undefined,
         bound: bound !== null,
         status: snap === null ? 'no-snap' : snap.status,
         syncError: syncError,
@@ -758,7 +766,7 @@ window.__ModuleLoader__.load({
       );
     }
 
-    exports.inject = ['theme', 'slots', 'settingsScope'];
+    exports.inject = ['theme', 'slots'];
     exports.apply = function (ctx) {
       // 壁纸启动恢复：只应用、绝不写回 host（setWallpaper 会 POST，会把 host 状态冲成 off——
       // 2026-08-15 修复：启动时用 applyWallpaperState 纯应用，host 有状态再覆盖）
@@ -786,11 +794,7 @@ window.__ModuleLoader__.load({
       // 配置（settings 卡里改）变更 → 订阅重建皮肤层，即时生效。
       // 皮肤层配置 scope 在 apply 期绑定一次（卡与订阅共用，不在 React 渲染期 bind；
       // bind 每次都是新 controller，重复 bind 永远读 'loading'——2026-08-17 教训）
-      var skinScopeBound = null;
-      try {
-        var skinSs = ctx.get('settingsScope');
-        if (skinSs !== undefined) skinScopeBound = skinSs.bind({ namespace: 'liya-skin' });
-      } catch (e) { skinScopeBound = null; }
+      var skinScopeBound = liyaConfigForm(ctx, 'dsh-liya-skin');
       var skinDisposer = null;
       function mountSkin() {
         if (skinDisposer) { try { skinDisposer(); } catch (e) {} skinDisposer = null; }
@@ -798,10 +802,24 @@ window.__ModuleLoader__.load({
       }
       mountSkin();
       ctx.effect(function () {
-        if (skinScopeBound === null) return function () {};
-        var off = skinScopeBound.subscribe(function () { mountSkin(); });
+        var off = null;
+        var timer = null;
+        var tries = 0;
+        // configForms 由官方 ui-settings 的 client 半提供：apply 期没就绪就短轮询补挂，
+        // 拿到真实配置后重挂一次（可能从默认值切到用户值）；全程不写 inject，避免 boot 卡 pending。
+        function attach() {
+          if (skinScopeBound === null) skinScopeBound = liyaConfigForm(ctx, 'dsh-liya-skin');
+          if (skinScopeBound === null) {
+            if (tries++ < 20) timer = setTimeout(attach, 250);
+            return;
+          }
+          try { off = skinScopeBound.subscribe(function () { mountSkin(); }); } catch (e) { off = null; }
+          mountSkin();
+        }
+        attach();
         return function () {
-          off();
+          if (off !== null) { try { off(); } catch (e) {} }
+          if (timer !== null) clearTimeout(timer);
           if (skinDisposer) { try { skinDisposer(); } catch (e) {} skinDisposer = null; }
         };
       }, 'dsh-liya-skin: skin config subscription');
@@ -819,18 +837,11 @@ window.__ModuleLoader__.load({
           function (props) { return WallpaperBlock(Object.assign({}, props, { ctx: ctx })); }
         );
       });
-      // 插件信息卡：设置 → 插件 → 插件配置（原生风格配置卡，排在官方 3 卡之后）
-      slots.inject('settings.plugin.item', function () {
-        return slots.register(
-          {
-            name: 'settings.plugin.item',
-            id: 'dsh-liya-skin',
-            order: 40,
-            label: function () { return 'dsh-liya-skin'; }
-          },
-          function (props) { return LiyaSkinCard(Object.assign({}, props, { ctx: ctx, bound: skinScopeBound })); }
-        );
-      });
+      // rc.2：`settings.plugin.item` 插槽已被官方移除（客户端插槽表里没有这个 key，
+      // 注册会抛错并连累整个 client 条目激活）。配置卡改由官方「设置 → 插件」页从
+      // 插件导出的 Config（volatile 字段）+ entry id 自动生成——不再注册自定义卡。
+      // LiyaSkinCard 组件保留在本文件里（未注册），万一原生页不显示该条目时可改挂
+      // `plugins.row.config`（keyed：`<包名>#<row id>`）复活。
     };
 
     module.exports = exports;

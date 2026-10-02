@@ -6,7 +6,7 @@
 //   4. 路由 /liya-wallpaper/state —— 壁纸状态持久化（GET 读 / POST 写 $DSH_HOME/liya-wallpaper-state.json），
 //      让壁纸选择像原生主题一样由 host 记住，换浏览器/重启都恢复（不依赖浏览器 localStorage）。
 //   5. 设置 namespace `liya-skin` 注册（settings 服务 + schemastery schema）——皮肤层开关持久化，
-//      client 半经 ctx.settingsScope 读写（配置卡像原生三卡一样可编辑）。
+//      client 半经 ctx.get('configForms') 读写（rc.2：配置页由官方插件页按 Config 自动生成）。
 // 壁纸图源：本插件目录下的 wallpapers/（把自己的图丢进去即出现在设置里）。
 // schemastery：junction 链接自资源目录 node_modules（workspace/dsh-plugins/node_modules/@deepseek-ai/schemastery），
 // 解决 bundle 插件 link 目录向上解析不到依赖的问题（2026-08-16）。
@@ -24,13 +24,30 @@ const STATE_FILE = join(DSH_HOME, 'liya-wallpaper-state.json')
 export const name = 'dsh-liya-skin'
 export const inject = ['webServer', 'settings']
 
-// 皮肤层配置 schema：总开关 + 三个装饰开关（默认全开；改完即时生效，client 订阅重建）
-const liyaSkinSchema = Schema.object({
-  skin: Schema.boolean().default(true).description('莉娅星月皮肤层总开关'),
-  topTrim: Schema.boolean().default(true).description('顶部星带'),
-  bottomTrim: Schema.boolean().default(true).description('底部星轨'),
-  titlebarBrand: Schema.boolean().default(true).description('标题栏「莉娅」徽标'),
+// ── 皮肤层配置（DSH 0.2.0-rc.2 原生姿势）
+// rc.2 的 settings 服务不再有 register()：配置卡片 = 「插件导出的 Config」+「profile entry id 当
+// namespace」（本插件 = dsh-liya-skin），由原生设置页自动生成；可写字段必须 .volatile()，
+// 否则 describe() 里根本不出现该条目（客户端 configForms.get() 也拿不到表单）。
+export const Config = Schema.object({
+  skin: Schema.boolean().default(true).description('莉娅星月皮肤层总开关').volatile(),
+  topTrim: Schema.boolean().default(true).description('顶部星带').volatile(),
+  bottomTrim: Schema.boolean().default(true).description('底部星轨').volatile(),
+  titlebarBrand: Schema.boolean().default(true).description('标题栏「莉娅」徽标').volatile(),
 })
+
+// volatile 配置值是 cosmokit 引用（.get() 取快照）；Symbol 判定跨 ESM/CJS 副本安全
+const VOLATILE_WRITE = Symbol.for('cosmokit.volatile.write')
+function cfgValue(value, fallback) {
+  if (value !== null && typeof value === 'object' && VOLATILE_WRITE in value) {
+    try {
+      const snap = value.get()
+      return snap === undefined ? fallback : snap
+    } catch {
+      return fallback
+    }
+  }
+  return value === undefined ? fallback : value
+}
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'])
 const MIME = {
@@ -147,43 +164,31 @@ function readBody(req) {
   })
 }
 
-export function apply(ctx) {
+export function apply(ctx, config) {
   console.log('[dsh-liya-skin] plugin loaded (host half)')
 
-  // 皮肤层配置 namespace。register 内部自带 fiber effect 清理，这里直接调用；
-  // try/catch 保证 register 失败不拖垮整插件（壁纸独立），错误同时存诊断路由可查。
-  const registerDiagnostics = { tried: false, ok: false, error: null, stack: null }
-  try {
-    ctx.settings.register('liya-skin', liyaSkinSchema, { applies: 'live' })
-    registerDiagnostics.tried = true
-    registerDiagnostics.ok = true
-    console.log('[dsh-liya-skin] settings namespace registered: liya-skin')
-  } catch (e) {
-    registerDiagnostics.tried = true
-    registerDiagnostics.ok = false
-    registerDiagnostics.error = String((e && e.message) || e)
-    registerDiagnostics.stack = String((e && e.stack) || '')
-    console.error('[dsh-liya-skin] settings.register failed:', e)
-  }
+  // 配置由 loader 注入（JSON 层 bootstrap-config + 用户改动合并）；每次读都取 volatile 快照
+  const liveConfig = () => ({
+    skin: cfgValue(config && config.skin, true),
+    topTrim: cfgValue(config && config.topTrim, true),
+    bottomTrim: cfgValue(config && config.bottomTrim, true),
+    titlebarBrand: cfgValue(config && config.titlebarBrand, true),
+  })
+  console.log('[dsh-liya-skin] config: ' + JSON.stringify(liveConfig()))
 
-  // 诊断路由（排障用）：describe 注册表 + probe register 重现错误。
+  // 诊断路由（排障用）：当前配置 + settings.describe 里本插件条目是否可见。
   // 访问 http://127.0.0.1:<WebUI端口>/liya-skin-debug
   ctx.webServer.register({
     kind: 'prefix',
     path: '/liya-skin-debug',
     handler: async (req, res) => {
-      const out = { registerDiagnostics, registered: [], probe: null }
+      const out = { config: liveConfig(), namespaces: [], entryServed: false }
       try {
         const desc = ctx.settings.describe({ redactSecrets: true })
-        out.registered = (desc || []).map((d) => d.ns)
+        out.namespaces = (desc || []).map((d) => d.ns)
+        out.entryServed = out.namespaces.includes('dsh-liya-skin')
       } catch (e) {
         out.describeError = String((e && e.message) || e)
-      }
-      try {
-        ctx.settings.register('liya-skin-probe', liyaSkinSchema, { applies: 'live' })
-        out.probe = 'ok'
-      } catch (e) {
-        out.probe = { error: String((e && e.message) || e), stack: String((e && e.stack) || '') }
       }
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify(out, null, 2))
