@@ -4,9 +4,6 @@
 > 0.2.1 桌面版下壁纸在暗色主题里无法稳定渲染（客户端主题取色 + bundle 缓存问题反复），
 > 2026-11-04 决定停止维护。
 > **本仓库于 2026-11-04 归档（GitHub 只读）**：不再更新、不再修复、不再发布；本地 DSH profile 中已移除。
->
-> 现役、仍在维护的莉娅 DSH 插件只有两个：
-> [dsh-puzzle](https://github.com/feverZHONG/dsh-puzzle) · [dsh-chess-xq](https://github.com/feverZHONG/dsh-chess-xq)
 
 ---
 
