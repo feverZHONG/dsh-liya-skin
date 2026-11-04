@@ -1,7 +1,7 @@
 {
   "name": "dsh-liya-skin-plugin",
   "version": "0.5.2",
-  "description": "莉娅 DSH 皮肤插件：壁纸（wallpapers/ 缩略图选择 + 透明度滑条 + host 持久化）+ 莉娅星月皮肤层（星月装饰/标题栏品牌/状态投影，卸载全还原）；皮肤层开关走 settings 配置卡，保存即时生效。v0.4.1 修复 settingsScope 重复 bind 导致皮肤层开关永不生效的坑。",
+  "description": "莉娅 DSH 皮肤插件：壁纸（缩略图选择 + 透明度滑条 + host 持久化）+ 星月皮肤层（顶部星带 / 底部星轨 / 标题栏「莉娅」徽标，卸载全还原）；配置走原生「设置 → 插件」。适配 DSH 0.2.1-rc.2。",
   "type": "module",
   "main": "index.js",
   "exports": {
