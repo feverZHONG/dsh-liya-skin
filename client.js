@@ -58,11 +58,25 @@ window.__ModuleLoader__.load({
       try { return getComputedStyle(document.body).getPropertyValue(name).trim(); } catch (e) { return ''; }
     }
 
-    // getComputedStyle 返回 rgb()/rgba()；转成带 alpha 的 rgba（非 rgb 格式原样兜底）
+    // getComputedStyle 的自定义属性返回「声明原值」：可能是 rgb()/rgba()，也可能是 #fff / #RRGGBB(AA)
+    // （DSH 0.2.1 起主题 token 用十六进制）。统一转成带 alpha 的 rgba；认不出的原样兜底。
     function toTranslucent(value, alpha) {
-      var m = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(value || '');
+      var v = String(value || '').trim();
+      if (!v) return '';
+      var m = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(v);
       if (m) return 'rgba(' + m[1] + ', ' + m[2] + ', ' + m[3] + ', ' + alpha + ')';
-      return value;
+      var hex = /^#([0-9a-fA-F]{3,8})$/.exec(v);
+      if (hex) {
+        var h = hex[1];
+        var r, g, b;
+        if (h.length === 3 || h.length === 4) {
+          r = parseInt(h[0] + h[0], 16); g = parseInt(h[1] + h[1], 16); b = parseInt(h[2] + h[2], 16);
+        } else if (h.length === 6 || h.length === 8) {
+          r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
+        }
+        if (r === r && g === g && b === b) return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
+      }
+      return v;
     }
 
     function computeTranslucentLayer() {
