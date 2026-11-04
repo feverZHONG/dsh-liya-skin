@@ -1,3 +1,15 @@
+# ⚠️ 本仓库已归档 · 停止维护 · 请勿使用
+
+> 本插件是莉娅 DSH 壁纸 + 星月皮肤层，最后版本 **v0.5.3**（适配 DSH `0.2.1-rc.2`）。
+> 0.2.1 桌面版下壁纸在暗色主题里无法稳定渲染（客户端主题取色 + bundle 缓存问题反复），
+> 2026-11-04 决定停止维护。
+> **本仓库于 2026-11-04 归档（GitHub 只读）**：不再更新、不再修复、不再发布；本地 DSH profile 中已移除。
+>
+> 现役、仍在维护的莉娅 DSH 插件只有两个：
+> [dsh-puzzle](https://github.com/feverZHONG/dsh-puzzle) · [dsh-chess-xq](https://github.com/feverZHONG/dsh-chess-xq)
+
+---
+
 # dsh-liya-skin-plugin · 莉娅 DSH 皮肤插件
 
 本地自建 DSH WebUI 皮肤插件，两块功能：
