@@ -1,6 +1,6 @@
 {
   "name": "dsh-liya-skin-plugin",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "莉娅 DSH 皮肤插件：壁纸（缩略图选择 + 透明度滑条 + host 持久化）+ 星月皮肤层（顶部星带 / 底部星轨 / 标题栏「莉娅」徽标，卸载全还原）；配置走原生「设置 → 插件」。适配 DSH 0.2.1-rc.2。",
   "type": "module",
   "main": "index.js",

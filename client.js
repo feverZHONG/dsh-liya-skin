@@ -54,12 +54,8 @@ window.__ModuleLoader__.load({
     }
     function opacityValue() { return currentOpacity() / 100; }
 
-    function readToken(name) {
-      try { return getComputedStyle(document.body).getPropertyValue(name).trim(); } catch (e) { return ''; }
-    }
-
-    // getComputedStyle 的自定义属性返回「声明原值」：可能是 rgb()/rgba()，也可能是 #fff / #RRGGBB(AA)
-    // （DSH 0.2.1 起主题 token 用十六进制）。统一转成带 alpha 的 rgba；认不出的原样兜底。
+    // 颜色统一转成带 alpha 的 rgba：支持 rgb()/rgba() 与 #rgb / #rrggbb / #rrggbbaa；
+    // 认不出的原样兜底（0.2.1 起主题 token 用十六进制，0.5.2 栽在只认 rgb()）。
     function toTranslucent(value, alpha) {
       var v = String(value || '').trim();
       if (!v) return '';
@@ -79,11 +75,64 @@ window.__ModuleLoader__.load({
       return v;
     }
 
-    function computeTranslucentLayer() {
+    // 解析颜色：hex / rgb()/rgba() 直接用；var(--static-…) / color-mix 之类交给浏览器
+    // 在一个离屏探针元素上算出 resolved color（不读 body，避免读到我们自己写的 override）。
+    function resolveColor(value) {
+      var v = String(value || '').trim();
+      if (!v) return '';
+      if (/^rgba?\(/i.test(v) || /^#/.test(v)) return v;
+      try {
+        var el = document.createElement('span');
+        el.style.position = 'absolute';
+        el.style.left = '-9999px';
+        el.style.top = '0';
+        el.style.color = v;
+        document.body.appendChild(el);
+        var c = getComputedStyle(el).color;
+        document.body.removeChild(el);
+        return c || '';
+      } catch (e) { return ''; }
+    }
+
+    // 从基础调色板 CSS 读 token 声明值：亮色在 `body{}`，暗色在 `body[data-ds-dark-theme]{}`。
+    // 关键：不读 getComputedStyle(body)——那会把我们上一轮写的 override 读回来（自污染，
+    // 0.5.2 在暗色下卡成白色 0.6 就是这个原因）。
+    function paletteToken(name, dark) {
+      var want = dark ? 'body[data-ds-dark-theme]' : 'body';
+      var base = '';
+      var sheets = document.styleSheets;
+      for (var i = 0; i < sheets.length; i++) {
+        var rules;
+        try { rules = sheets[i].cssRules; } catch (e) { continue; }
+        if (!rules) continue;
+        for (var j = 0; j < rules.length; j++) {
+          var rule = rules[j];
+          if (!rule.style) continue;
+          var sel = String(rule.selectorText || '').replace(/\s+/g, '');
+          if (sel !== want && sel !== 'body') continue;
+          var v = rule.style.getPropertyValue(name);
+          if (!v) continue;
+          if (sel === want) return v;
+          if (!base) base = v;
+        }
+      }
+      return base;
+    }
+
+    // 同时算亮/暗两套半透明值，交给 theme.overrideTokens 的 {light, dark} 结构，
+    // 由主题服务按当前 colorScheme 自己挑——这样不依赖「apply 时 body 上有没有 dark 属性」，
+    // 也不会因为监听顺序先算到亮色而在暗色下留一层白（0.5.2/0.5.3 都栽在时序上）。
+    function computeTranslucentLayer(snapshot) {
+      var tokens = snapshot && snapshot.active && snapshot.active.tokens ? snapshot.active.tokens : null;
       var layer = {};
       WALLPAPER_TOKENS.forEach(function (name) {
-        var v = toTranslucent(readToken(name), WALLPAPER_BG_ALPHA);
-        if (v) layer[name] = { light: v, dark: v };
+        var custom = tokens && typeof tokens[name] === 'string' ? tokens[name].trim() : '';
+        var lightRaw = paletteToken(name, false) || custom;
+        var darkRaw = paletteToken(name, true) || custom;
+        var light = toTranslucent(resolveColor(lightRaw), WALLPAPER_BG_ALPHA);
+        var dark = toTranslucent(resolveColor(darkRaw), WALLPAPER_BG_ALPHA);
+        if (!light && !dark) return;
+        layer[name] = { light: light || dark, dark: dark || light };
       });
       return layer;
     }
@@ -95,15 +144,20 @@ window.__ModuleLoader__.load({
       }
     }
 
-    // defer=true 时等一帧再读值（换皮肤后 DOM 还没落定），避免读到半成品
-    function syncWallpaperOverride(ctx, value, defer) {
+    // snapshot：可选的 theme 快照（theme/change 直接给）；没给就现取 theme.getTheme()。
+    // 取色走调色板 CSS + 快照，不依赖 body 上 DOM 变量是否已写入，也不受自身 override 影响。
+    function syncWallpaperOverride(ctx, value, defer, snapshot) {
       disposeWallpaperOverride();
       if (!value || value === 'off') return;
       function apply() {
         var theme = ctx.get('theme');
         if (theme === undefined) return;
+        var snap = snapshot;
+        if (!snap && typeof theme.getTheme === 'function') {
+          try { snap = theme.getTheme(); } catch (e) { snap = null; }
+        }
         try {
-          wallpaperOverrideDisposer = theme.overrideTokens('liya-wallpaper', computeTranslucentLayer());
+          wallpaperOverrideDisposer = theme.overrideTokens('liya-wallpaper', computeTranslucentLayer(snap));
         } catch (e) {
           console.warn('[dsh-liya-skin] wallpaper override failed: ' + (e && e.message));
         }
@@ -786,9 +840,9 @@ window.__ModuleLoader__.load({
       // 2026-08-15 修复：启动时用 applyWallpaperState 纯应用，host 有状态再覆盖）
       applyWallpaperState(ctx, currentWallpaper(), currentOpacity());
       restoreFromHost(ctx);
-      ctx.on('theme/change', function () {
+      ctx.on('theme/change', function (snapshot) {
         var v = currentWallpaper();
-        if (v && v !== 'off') syncWallpaperOverride(ctx, v, true);
+        if (v && v !== 'off') syncWallpaperOverride(ctx, v, false, snapshot);
       });
       ctx.effect(function () {
         function onStorage(e) {
